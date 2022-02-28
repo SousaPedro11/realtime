@@ -13,25 +13,32 @@ import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
+from decouple import config, Csv
+from kombu import Exchange, Queue
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-^37upvmfqisldy#bu(zk8fg@vnu&0l80of(=is-@^p0rcsh^*o'
+SECRET_KEY = config('SECRET_KEY', default=os.urandom(16))
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default=[], cast=Csv())
 
 # Application definition
 
 INSTALLED_APPS = [
     'channels',
     'channels_redis',
+    'django_extensions',
+    'django_filters',
     'bootstrap5',
+    'rest_framework',
+    'drf_spectacular',
 
     'chat',
 
@@ -58,7 +65,7 @@ ROOT_URLCONF = 'realtime.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': ['templates'],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -79,8 +86,15 @@ ASGI_APPLICATION = 'realtime.asgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': config('ENGINE', 'django.db.backends.postgresql_psycopg2'),
+        'NAME': config('DB_NAME'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASS'),
+        'HOST': config('DB_HOST'),
+        'PORT': config('DB_PORT'),
+        'OPTIONS': {
+            'options': '-c search_path=address'
+        }
     }
 }
 
@@ -132,7 +146,68 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [('127.0.0.1', 6379)],
+            "hosts": [config('BROKER_URL')],
         },
     },
+}
+
+task_default_queue = 'default'  # 1
+default_exchange = Exchange('media', type='direct')  # 2
+task_queues = (
+    Queue(
+        'media_queue',  # 3
+        exchange=default_exchange,  # 4
+        routing_key='video'  # 5
+    )
+)
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERYD_CONCURRENCY = 20
+BROKER_URL = config('BROKER_URL')
+BROKER_POOL_LIMIT = 30
+
+CELERY_BROKER_TRANSPORT_OPTIONS = {'visibility_timeout': 3600}
+CELERY_RESULT_BACKEND = config('BROKER_URL', default='redis://localhost:6379')
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+    ),
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.AllowAny',
+    ),
+    # 'DEFAULT_PAGINATION_CLASS': 'app.ecommerce.paginators.CustomPaginator',
+    # 'PAGE_SIZE': 50,
+    'DEFAULT_FILTER_BACKENDS': ('django_filters.rest_framework.DjangoFilterBackend',),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    # 'DATETIME_FORMAT': "%Y-%m-%dT%H:%M:%S.%fZ",
+}
+
+SPECTACULAR_SETTINGS = {
+    'VERSION': '1.0.0',
+    'TITLE': 'DGTAX ECOMMERCE API',
+    'CONTACT': {
+        'name': 'RCS Partner',
+        'email': 'corporativo@rcspartner.com.br'
+    },
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,
+        "persistAuthorization": True,
+        # "displayOperationId": True,
+    },
+    # 'DEFAULT_GENERATOR_CLASS': 'drf_spectacular.generators.SchemaGenerator',
+    # available SwaggerUI versions: https://github.com/swagger-api/swagger-ui/releases
+    'SWAGGER_UI_DIST': 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest',
+    'SWAGGER_UI_FAVICON_HREF': 'https://cdn.jsdelivr.net/npm/swagger-ui-dist@latest/favicon-32x32.png',
+    'REDOC_DIST': 'https://cdn.jsdelivr.net/npm/redoc@latest',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SORT_OPERATION_PARAMETERS': False,
+    # 'SCHEMA_PATH_PREFIX': r'/api/v[0-9]/[a-z]*',
 }

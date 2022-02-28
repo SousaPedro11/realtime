@@ -10,6 +10,13 @@ python-decouple = "*"
 channels = "*"
 channels-redis = "*"
 django-bootstrap-v5 = "*"
+django-extensions = "*"
+django-filter = "*"
+drf-spectacular = "*"
+djangorestframework = "*"
+markdown = "*"
+psycopg2-binary = "*"
+celery = "*"
 
 [dev-packages]
 
